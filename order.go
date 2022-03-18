@@ -86,6 +86,7 @@ func createOrder(w http.ResponseWriter, r *http.Request) {
 
 	if result != nil {
 		RespondWithJson(w, "Failed to complete transaction", false)
+		return
 	}
 
 	RespondWithJson(w, "New order has been made", true)
