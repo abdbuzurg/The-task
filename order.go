@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"gorm.io/gorm"
 )
 
 type Order struct {
@@ -65,9 +67,26 @@ func createOrder(w http.ResponseWriter, r *http.Request) {
 	user.Balance = user.Balance - float32(order.Amount)*productDetail.Price
 	productDetail.AmountLeft = productDetail.AmountLeft - order.Amount
 
-	db.Model(&ProductDetail{}).Where("id = ?", order.ProductID).Updates(productDetail)
-	db.Model(&User{}).Where("id = ?", order.UserID).Updates(user)
-	db.Create(&order)
+	result := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&ProductDetail{}).Where("id = ?", order.ProductID).Updates(productDetail).Error; err != nil {
+			RespondWithJson(w, "Internal server error. Failed to update ProductDetail", false)
+			return err
+		}
+		if err := tx.Model(&User{}).Where("id = ?", order.UserID).Updates(user).Error; err != nil {
+			RespondWithJson(w, "Internal server error. Failed to update user balance", false)
+			return err
+		}
+		if err := tx.Create(&order).Error; err != nil {
+			RespondWithJson(w, "Internal server error. Failed to create new order", false)
+			return err
+		}
+
+		return nil
+	})
+
+	if result != nil {
+		RespondWithJson(w, "Failed to complete transaction", false)
+	}
 
 	RespondWithJson(w, "New order has been made", true)
 }
